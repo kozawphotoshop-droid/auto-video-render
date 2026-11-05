@@ -1,10 +1,8 @@
 import os
 import json
 import random
-import glob
 import subprocess
 import urllib.request
-import urllib.parse
 import re
 
 AUDIO_DRIVE_FOLDER_ID = os.environ.get("AUDIO_FOLDER_ID")
@@ -60,28 +58,35 @@ def main():
     if current_index > 30:
         current_index = 1
 
-    # .mp3 သို့မဟုတ် .wav နှစ်မျိုးစလုံးကို ရှာဖွေနိုင်ရန်
     audio_prefix = f"{current_index:02d}"
     print(f"ယနေ့ ရှာဖွေမည့် အသံဖိုင် နံပါတ်: {audio_prefix} (Index: {current_index})")
 
     os.makedirs("downloads", exist_ok=True)
     
-    print("Google Drive မှ အသံဖိုင်များကို စစ်ဆေးနေပါပြီ...")
+    # ၁။ audio ဖိုဒါမှ အသံဖိုင်ကို ရှာဖွေခြင်း (.mp3 သို့မဟုတ် .wav)
+    print("Google Drive ၏ audio ဖိုဒါကို စစ်ဆေးနေပါပြီ...")
     audio_files = get_drive_files_in_folder(AUDIO_DRIVE_FOLDER_ID)
     
     target_audio_id = None
     target_audio_name = "audio.wav"
     for f in audio_files:
-        if f["name"].startswith(audio_prefix):
+        if f["name"].startswith(audio_prefix) and f["name"].lower().endswith(('.mp3', '.wav')):
             target_audio_id = f["id"]
-            if f["name"].endswith(".wav"):
-                target_audio_name = "audio.wav"
-            else:
+            if f["name"].lower().endswith('.mp3'):
                 target_audio_name = "audio.mp3"
+            else:
+                target_audio_name = "audio.wav"
             break
             
     if not target_audio_id and audio_files:
-        target_audio_id = audio_files[min(current_index - 1, len(audio_files) - 1)]["id"]
+        for f in audio_files:
+            if f["name"].lower().endswith(('.mp3', '.wav')):
+                target_audio_id = f["id"]
+                if f["name"].lower().endswith('.mp3'):
+                    target_audio_name = "audio.mp3"
+                else:
+                    target_audio_name = "audio.wav"
+                break
 
     if not target_audio_id:
         print("Error: Google Drive ၏ audio ဖိုဒါထဲတွင် အသံဖိုင် မတွေ့ရှိရပါ။")
@@ -90,7 +95,8 @@ def main():
     audio_path = f"downloads/{target_audio_name}"
     download_file(target_audio_id, audio_path)
 
-    print("Google Drive မှ ပုံများကို စစ်ဆေးနေပါပြီ...")
+    # ၂။ images ဖိုဒါမှ ပုံများကို ရှာဖွေခြင်း
+    print("Google Drive ၏ images ဖိုဒါကို စစ်ဆေးနေပါပြီ...")
     image_files = get_drive_files_in_folder(IMAGES_DRIVE_FOLDER_ID)
     valid_images = [f for f in image_files if f["name"].lower().endswith(('.png', '.jpg', '.jpeg'))]
     
