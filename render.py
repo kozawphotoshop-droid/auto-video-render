@@ -21,15 +21,11 @@ def save_state(state):
         json.dump(state, f, indent=4)
 
 def get_drive_files_in_folder(folder_id):
-    """ Google Drive Public Folder ထဲရှိ ဖိုင်များ၏ ID နှင့် နာမည်များကို ရယူခြင်း """
     url = f"https://drive.google.com/drive/folders/{folder_id}"
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-    
     try:
         with urllib.request.urlopen(req) as response:
             html_content = response.read().decode('utf-8')
-            
-        # Regex ဖြင့် Drive ထဲရှိ file ID နှင့် နာမည်များကို ရှာဖွေခြင်း
         matches = re.findall(r'\["([a-zA-Z0-9_-]{25,})",\s*"([^"]+)"', html_content)
         files = []
         seen_ids = set()
@@ -44,13 +40,10 @@ def get_drive_files_in_folder(folder_id):
 
 def download_file(file_id, output_path):
     url = f"https://drive.google.com/uc?export=download&id={file_id}"
-    # Cookie ရယူရန် URL သို့ ပထမဦးစွာ Request ပို့ခြင်း
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
     urllib.request.install_opener(opener)
-    
     try:
         response = opener.open(url)
-        # Confirm token ပါရှိမရှိ စစ်ဆေးခြင်း (ကြီးမားသောဖိုင်များအတွက်)
         content = response.read()
         with open(output_path, "wb") as f:
             f.write(content)
@@ -67,43 +60,44 @@ def main():
     if current_index > 30:
         current_index = 1
 
-    audio_filename_target = f"{current_index:02d}.mp3"
-    print(f"ယနေ့ ရှာဖွေမည့် အသံဖိုင်: {audio_filename_target} (Index: {current_index})")
+    # .mp3 သို့မဟုတ် .wav နှစ်မျိုးစလုံးကို ရှာဖွေနိုင်ရန်
+    audio_prefix = f"{current_index:02d}"
+    print(f"ယနေ့ ရှာဖွေမည့် အသံဖိုင် နံပါတ်: {audio_prefix} (Index: {current_index})")
 
     os.makedirs("downloads", exist_ok=True)
     
-    # ၁။ Audio ဖိုင်များကို Drive မှ လှမ်းဆွဲရန် ရှာဖွေခြင်း
     print("Google Drive မှ အသံဖိုင်များကို စစ်ဆေးနေပါပြီ...")
     audio_files = get_drive_files_in_folder(AUDIO_DRIVE_FOLDER_ID)
     
     target_audio_id = None
+    target_audio_name = "audio.wav"
     for f in audio_files:
-        if audio_filename_target in f["name"]:
+        if f["name"].startswith(audio_prefix):
             target_audio_id = f["id"]
+            if f["name"].endswith(".wav"):
+                target_audio_name = "audio.wav"
+            else:
+                target_audio_name = "audio.mp3"
             break
             
     if not target_audio_id and audio_files:
-        # အကယ်၍ တိကျသော နာမည်မတွေ့ပါက Index အလိုက် ပထမဆုံးရရှိနိုင်သည့် အသံကို ယူမည်
         target_audio_id = audio_files[min(current_index - 1, len(audio_files) - 1)]["id"]
 
     if not target_audio_id:
         print("Error: Google Drive ၏ audio ဖိုဒါထဲတွင် အသံဖိုင် မတွေ့ရှိရပါ။")
         return
 
-    audio_path = "downloads/audio.mp3"
+    audio_path = f"downloads/{target_audio_name}"
     download_file(target_audio_id, audio_path)
 
-    # ၂။ Images ဖိုင်များကို Drive မှ လှမ်းဆွဲရန်
     print("Google Drive မှ ပုံများကို စစ်ဆေးနေပါပြီ...")
     image_files = get_drive_files_in_folder(IMAGES_DRIVE_FOLDER_ID)
-    
     valid_images = [f for f in image_files if f["name"].lower().endswith(('.png', '.jpg', '.jpeg'))]
     
     if not valid_images:
         print("Error: Google Drive ၏ images ဖိုဒါထဲတွင် ပုံများ မတွေ့ရှိရပါ။")
         return
 
-    # ပုံများကို ကျပန်း (Random) ၃ ပုံ ရွေးထုတ်မည် (သို့မဟုတ် လိုသလောက်)
     selected_images = random.sample(valid_images, min(3, len(valid_images)))
     
     local_image_paths = []
@@ -112,11 +106,7 @@ def main():
         download_file(img_info["id"], img_path)
         local_image_paths.append(img_path)
 
-    print(f"စုစုပေါင်း ကျပန်းရွေးချယ်ထားသော ပုံအရေအတွက်: {len(local_image_paths)}")
-
-    # ၃။ FFmpeg ဖြင့် ဗီဒီယို တည်ဆောက်ခြင်း
     output_video = "final_output.mp4"
-    
     temp_dir = "temp_processed"
     os.makedirs(temp_dir, exist_ok=True)
 
@@ -157,7 +147,6 @@ def main():
 
     if process.returncode == 0:
         print("Video Render လုပ်ဆောင်ချက် အောင်မြင်စွာ ပြီးဆုံးပါပြီ!")
-        # ၄။ State ကို နောက်တစ်ရက်အတွက် တိုးပေးခြင်း (+1)
         state["current_index"] = current_index + 1
         save_state(state)
         print(f"State အသစ်သို့ ပြောင်းလဲပြီးပါပြီ: Index {current_index + 1}")
