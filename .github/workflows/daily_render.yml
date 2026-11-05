@@ -30,6 +30,12 @@ jobs:
       run: |
         python render.py
 
+    - name: ဗီဒီယိုဖိုင်ကို Artifact အဖြစ် သိမ်းဆည်းခြင်း (Download ဆွဲရန်)
+      uses: actions/upload-artifact@v3
+      with:
+        name: generated-video
+        path: final_output.mp4
+
     - name: State ဖိုင်အသစ်ကို GitHub သို့ ပြန်လည်သိမ်းဆည်းခြင်း (Commit & Push)
       uses: stefanzweifel/git-auto-commit-action@v4
       with:
