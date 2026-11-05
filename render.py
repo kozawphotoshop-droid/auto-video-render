@@ -8,16 +8,6 @@ import re
 AUDIO_DRIVE_FOLDER_ID = os.environ.get("AUDIO_FOLDER_ID")
 IMAGES_DRIVE_FOLDER_ID = os.environ.get("IMAGES_FOLDER_ID")
 
-def load_state():
-    if os.path.exists("state.json"):
-        with open("state.json", "r") as f:
-            return json.load(f)
-    return {"current_index": 1}
-
-def save_state(state):
-    with open("state.json", "w") as f:
-        json.dump(state, f, indent=4)
-
 def get_drive_files_in_folder(folder_id):
     url = f"https://drive.google.com/drive/folders/{folder_id}"
     req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -25,7 +15,6 @@ def get_drive_files_in_folder(folder_id):
         with urllib.request.urlopen(req) as response:
             html_content = response.read().decode('utf-8')
         
-        # Google Drive ဖိုင် ID များကို ရှာဖွေခြင်း
         matches = re.findall(r'\["([a-zA-Z0-9_-]{25,})",\s*"([^"]+)"', html_content)
         files = []
         seen_ids = set()
@@ -61,49 +50,36 @@ def download_file(file_id, output_path):
 
 def main():
     print("ဗီဒီယို ဖန်တီးခြင်း လုပ်ငန်းစဉ် စတင်ပါပြီ...")
-    
-    state = load_state()
-    current_index = state.get("current_index", 1)
-    
-    if current_index > 30:
-        current_index = 1
-
-    audio_prefix = f"{current_index:02d}"
-    print(f"ယနေ့ ရှာဖွေမည့် အသံဖိုင် နံပါတ် ရှေ့ဆက်: {audio_prefix} (Index: {current_index})")
 
     os.makedirs("downloads", exist_ok=True)
     
     print("Google Drive ၏ audio ဖိုဒါကို စစ်ဆေးနေပါပြီ...")
     audio_files = get_drive_files_in_folder(AUDIO_DRIVE_FOLDER_ID)
-    print(f"တွေ့ရှိရသော အသံဖိုင် စုစုပေါင်း: {len(audio_files)} ခု")
+    print(f"တွေ့ရှိရသော ဖိုင်စုစုပေါင်း: {audio_files}")
     
+    # audio ဖိုဒါထဲတွင် ရှိသော မည်သည့် အသံဖိုင်ကိုမဆို (ဘယ်လိုအမည်ဖြစ်ဖြစ်) ရယူမည်
     target_audio_id = None
     target_audio_name = "audio.wav"
     
-    # တိကျသော နံပါတ် (ဥပမာ 01.wav) ပါဝင်သော ဖိုင်ကို ရှာဖွေခြင်း
     for f in audio_files:
-        if f["name"].startswith(audio_prefix):
+        name_lower = f["name"].lower()
+        # အသံဖိုင် အမျိုးအစား ဖြစ်နိုင်ချေရှိသော ဖိုင်များကို ရယူရန်
+        if name_lower.endswith(('.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac')):
             target_audio_id = f["id"]
-            if f["name"].lower().endswith('.mp3'):
+            if name_lower.endswith('.mp3'):
                 target_audio_name = "audio.mp3"
             else:
                 target_audio_name = "audio.wav"
-            print(f"ကိုက်ညီသော အသံဖိုင် တွေ့ရှိသည်: {f['name']}")
+            print(f"အသုံးပြုမည့် အသံဖိုင် တွေ့ရှိသည်: {f['name']}")
             break
             
-    # အကယ်၍ အမည်ဖြင့် တိုက်ရိုက်မတွေ့ပါက ဖိုဒါထဲရှိ စာရင်းမှ အညွှန်းအတိုင်း ယူမည်
+    # အကယ်၍ Extension မပါဘဲ တင်ထားလျှင်လည်း ဖိုဒါထဲရှိ ပထမဆုံးဖိုင်ကို အသံဖိုင်အဖြစ် ယူမည်
     if not target_audio_id and audio_files:
-        idx_pos = (current_index - 1) % len(audio_files)
-        target_audio_id = audio_files[idx_pos]["id"]
-        file_name = audio_files[idx_pos]["name"]
-        if file_name.lower().endswith('.mp3'):
-            target_audio_name = "audio.mp3"
-        else:
-            target_audio_name = "audio.wav"
-        print(f"စာရင်းမှ ရွေးချယ်လိုက်သော အသံဖိုင်: {file_name}")
+        target_audio_id = audio_files[0]["id"]
+        print(f"ဖိုဒါထဲမှ ပထမဆုံးဖိုင်ကို အသံဖိုင်အဖြစ် သတ်မှတ်သည်: {audio_files[0]['name']}")
 
     if not target_audio_id:
-        print("Error: Google Drive ၏ audio ဖိုဒါထဲတွင် အသံဖိုင် မတွေ့ရှိရပါ။")
+        print("Error: Google Drive ၏ audio ဖိုဒါထဲတွင် ဖိုင် တစ်စုံတစ်ရာ မတွေ့ရှိရပါ။")
         return
 
     audio_path = f"downloads/{target_audio_name}"
@@ -167,9 +143,6 @@ def main():
 
     if process.returncode == 0:
         print("Video Render လုပ်ဆောင်ချက် အောင်မြင်စွာ ပြီးဆုံးပါပြီ!")
-        state["current_index"] = current_index + 1
-        save_state(state)
-        print(f"State အသစ်သို့ ပြောင်းလဲပြီးပါပြီ: Index {current_index + 1}")
     else:
         print(f"Error ဖြစ်ပွားခဲ့သည်: {process.stderr[-500:]}")
 
