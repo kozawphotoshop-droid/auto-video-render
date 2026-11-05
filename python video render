@@ -1,0 +1,126 @@
+import os
+import glob
+import subprocess
+import gradio as gr
+
+def create_transition_slideshow(audio_file, image_folder_name, seconds_per_image, transition_type, transition_duration):
+    if audio_file is None:
+        return None, "ကျေးဇူးပြု၍ အသံဖိုင် (MP3) တင်ပေးပါ။"
+    
+    image_folder = image_folder_name.strip()
+    if not os.path.exists(image_folder):
+        return None, f"Error: '{image_folder}' ဆိုသော Folder ကို ရှာမတွေ့ပါ။"
+
+    images = sorted(
+        glob.glob(os.path.join(image_folder, "*.jpg")) + 
+        glob.glob(os.path.join(image_folder, "*.png")) +
+        glob.glob(os.path.join(image_folder, "*.jpeg"))
+    )
+    
+    if not images:
+        return None, f"Error: '{image_folder}' ထဲတွင် ပုံဖိုင်များ မရှိပါ။"
+
+    mp3_path = audio_file if isinstance(audio_file, str) else (audio_file.name if hasattr(audio_file, 'name') else "audio.mp3")
+    output_video = "final_transition_output.mp4"
+    if os.path.exists(output_video):
+        os.remove(output_video)
+
+    # ၁။ ပုံများကို 1280x720 သို့ Resize လုပ်ခြင်း
+    temp_img_dir = "temp_slideshow_imgs"
+    os.makedirs(temp_img_dir, exist_ok=True)
+    
+    processed_images = []
+    for idx, img_path in enumerate(images):
+        out_img = os.path.join(temp_img_dir, f"img_{idx:03d}.png")
+        resize_cmd = [
+            "ffmpeg", "-y", "-i", img_path,
+            "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",
+            out_img
+        ]
+        subprocess.run(resize_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        processed_images.append(out_img)
+
+    # ၂။ FFmpeg xfade (Transitions / အကူးအပြောင်း Effect များ) တည်ဆောက်ခြင်း
+    n = len(processed_images)
+    filter_parts = []
+    for i in range(n):
+        filter_parts.append(f"[{i}:v]scale=1280:720,setsar=1[v{i}]")
+
+    if n == 1:
+        filter_parts.append(f"[v0]eq=brightness='0.03*sin(t*3)':saturation=1.2[outv]")
+        filter_parts_str = ";".join(filter_parts)
+    else:
+        curr_offset = seconds_per_image - transition_duration
+        if curr_offset <= 0: 
+            curr_offset = 1.0
+        
+        filter_parts.append(f"[v0][v1]xfade=transition={transition_type}:duration={transition_duration}:offset={curr_offset}[f1]")
+        
+        prev = "f1"
+        for i in range(2, n):
+            curr_offset += (seconds_per_image - transition_duration)
+            nxt = f"f{i}"
+            filter_parts.append(f"[{prev}][v{i}]xfade=transition={transition_type}:duration={transition_duration}:offset={curr_offset}[{nxt}]")
+            prev = nxt
+            
+        filter_parts.append(f"[{prev}]eq=brightness='0.03*sin(t*3)':saturation=1.2[outv]")
+        filter_parts_str = ";".join(filter_parts)
+
+    # FFmpeg Command ဖွဲ့စည်းခြင်း
+    ffmpeg_cmd = ["ffmpeg", "-y"]
+    for img in processed_images:
+        ffmpeg_cmd.extend(["-loop", "1", "-t", str(seconds_per_image), "-i", img])
+    
+    ffmpeg_cmd.extend(["-i", mp3_path])
+    ffmpeg_cmd.extend([
+        "-filter_complex", filter_parts_str,
+        "-map", "[outv]",
+        "-map", f"{n}:a",
+        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-shortest",
+        output_video
+    ])
+
+    print("Transitions များထည့်သွင်းကာ ဗီဒီယို ဖန်တီးနေပါပြီ...")
+    process = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    
+    if process.returncode != 0 or not os.path.exists(output_video):
+        return None, f"FFmpeg Error: {process.stderr[-400:]}"
+    
+    return output_video, "ဗီဒီယို အောင်မြင်စွာ ထုတ်လုပ်ပြီးပါပြီ!"
+
+# Gradio GUI Interface ဖန်တီးခြင်း
+with gr.Blocks(theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# 🎬 Advanced MP3 to Slideshow & Transitions Generator (GUI)")
+    gr.Markdown("အသံဖိုင်တင်ပါ၊ ပုံများရှိသော Folder နာမည်ပေးပါ၊ လိုချင်သော Transition Effect ပုံစံများကို စိတ်ကြိုက်ရွေးချယ်ပါ။")
+    
+    with gr.Row():
+        with gr.Column():
+            audio_input = gr.Audio(label="MP3 ဖိုင် တင်ရန်", type="filepath")
+            folder_input = gr.Textbox(value="images", label="ပုံများရှိသော Folder နာမည်")
+            
+            with gr.Row():
+                slider_input = gr.Slider(minimum=3, maximum=30, value=8, step=1, label="ပုံတစ်ပုံချင်းစီ ကြာချိန် (စက္ကန့်)")
+                trans_duration = gr.Slider(minimum=0.5, maximum=3.0, value=1.0, step=0.5, label="Transition ကြာချိန် (စက္ကန့်)")
+            
+            # Transition Effects များကို စိတ်ကြိုက်ရွေးချယ်စရာ Dropdown
+            transition_dropdown = gr.Dropdown(
+                choices=["fade", "wipeleft", "wiperight", "slideleft", "slideright", "circlecrop", "rectcrop", "distance", "fadeblack", "fadewhite"],
+                value="fade",
+                label="Transition Effect ပုံစံ ရွေးချယ်ရန်"
+            )
+            
+            submit_btn = gr.Button("ဗီဒီယို စတင်ထုတ်လုပ်မည်", variant="primary")
+            
+        with gr.Column():
+            status_output = gr.Textbox(label="လုပ်ဆောင်ချက် အခြေအနေ")
+            video_output = gr.Video(label="ထွက်လာမည့် Slideshow ဗီဒီယို")
+
+    submit_btn.click(
+        fn=create_transition_slideshow,
+        inputs=[audio_input, folder_input, slider_input, transition_dropdown, trans_duration],
+        outputs=[video_output, status_output]
+    )
+
+if __name__ == "__main__":
+    demo.launch(share=True)
