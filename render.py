@@ -18,7 +18,6 @@ def main():
     audio_url = f"https://drive.google.com/drive/folders/{AUDIO_DRIVE_FOLDER_ID}"
     gdown.download_folder(audio_url, output="downloads/audio", quiet=False, use_cookies=False)
     
-    # downloads/audio ဖိုဒါအတွင်း မည်သည့်နေရာတွင်ရှိသည်ဖြစ်စေ အသံဖိုင်ကို ရှာဖွေခြင်း
     audio_files = sorted(
         glob.glob(os.path.join("downloads/audio", "**", "*.mp3"), recursive=True) +
         glob.glob(os.path.join("downloads/audio", "**", "*.wav"), recursive=True) +
@@ -40,7 +39,6 @@ def main():
     images_url = f"https://drive.google.com/drive/folders/{IMAGES_DRIVE_FOLDER_ID}"
     gdown.download_folder(images_url, output="downloads/images", quiet=False, use_cookies=False)
     
-    # downloads/images ဖိုဒါအတွင်း မည်သည့်နေရာတွင်ရှိသည်ဖြစ်စေ ပုံများကို ရှာဖွေခြင်း
     valid_images = sorted(
         glob.glob(os.path.join("downloads/images", "**", "*.png"), recursive=True) +
         glob.glob(os.path.join("downloads/images", "**", "*.jpg"), recursive=True) +
@@ -106,4 +104,5 @@ def main():
     else:
         print(f"Error ဖြစ်ပွားခဲ့သည်: {process.stderr[-500:]}")
 
-if __name
+if __name__ == "__main__":
+    main()
