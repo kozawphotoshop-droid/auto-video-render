@@ -1,19 +1,22 @@
 import os
 import glob
-import random
 import subprocess
 import gdown
 
 AUDIO_DRIVE_FOLDER_ID = os.environ.get("AUDIO_FOLDER_ID")
 IMAGES_DRIVE_FOLDER_ID = os.environ.get("IMAGES_FOLDER_ID")
 
+# GitHub GUI Form မှ ပို့လိုက်သော တန်ဖိုးများကို ရယူခြင်း (မရှိပါက Default အနေဖြင့် ၈ စက္ကန့်နှင့် ultrafast ကို သုံးမည်)
+seconds_per_image = int(os.environ.get("INPUT_SECONDS", 8))
+video_preset = os.environ.get("INPUT_PRESET", "ultrafast")
+
 def main():
-    print("ဗီဒီယို ဖန်တီးခြင်း လုပ်ငန်းစဉ် စတင်ပါပြီ...")
+    print(f"ဗီဒီယို ဖန်တီးခြင်း စတင်ပါပြီ... (ပုံတစ်ပုံချင်းစီ: {seconds_per_image} စက္ကန့်၊ Preset: {video_preset})")
 
     os.makedirs("downloads/audio", exist_ok=True)
     os.makedirs("downloads/images", exist_ok=True)
     
-    # ၁။ Google Drive ၏ audio ဖိုဒါမှ ဖိုင်များကို gdown ဖြင့် ဆွဲယူခြင်း
+    # ၁။ Google Drive ၏ audio ဖိုဒါမှ အသံဖိုင်ကို ဆွဲယူခြင်း
     print("Google Drive ၏ audio ဖိုဒါကို ဆွဲယူနေပါပြီ...")
     audio_url = f"https://drive.google.com/drive/folders/{AUDIO_DRIVE_FOLDER_ID}"
     gdown.download_folder(audio_url, output="downloads/audio", quiet=False, use_cookies=False)
@@ -34,7 +37,7 @@ def main():
     audio_path = audio_files[0]
     print(f"အသုံးပြုမည့် အသံဖိုင်: {audio_path}")
 
-    # ၂။ Google Drive ၏ images ဖိုဒါမှ ပုံများကို gdown ဖြင့် ဆွဲယူခြင်း
+    # ၂။ Google Drive ၏ images ဖိုဒါမှ ပုံများကို ဆွဲယူခြင်း
     print("Google Drive ၏ images ဖိုဒါကို ဆွဲယူနေပါပြီ...")
     images_url = f"https://drive.google.com/drive/folders/{IMAGES_DRIVE_FOLDER_ID}"
     gdown.download_folder(images_url, output="downloads/images", quiet=False, use_cookies=False)
@@ -55,14 +58,12 @@ def main():
         print("Error: Google Drive ၏ images ဖိုဒါထဲတွင် ပုံများ မတွေ့ရှိရပါ။")
         return
 
-    selected_images = valid_images[:10]
-
     # ၃။ ပုံများကို 1280x720 သို့ Resize လုပ်ခြင်း
     temp_img_dir = "temp_slideshow_imgs"
     os.makedirs(temp_img_dir, exist_ok=True)
     
     processed_images = []
-    for idx, img_path in enumerate(selected_images):
+    for idx, img_path in enumerate(valid_images):
         out_img = os.path.join(temp_img_dir, f"img_{idx:03d}.png")
         resize_cmd = [
             "ffmpeg", "-y", "-i", img_path,
@@ -72,11 +73,12 @@ def main():
         subprocess.run(resize_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         processed_images.append(out_img)
 
-    # ၄။ FFmpeg ဖြင့် ဗီဒီယို Render လုပ်ခြင်း
+    # ၄။ FFmpeg ဖြင့် ဗီဒီယို Render လုပ်ခြင်း (ပုံများကို Loop ပတ်၍ အသံဖိုင်အရှည်အတိုင်း ထုတ်မည်)
     output_video = "final_output.mp4"
-    seconds_per_image = 10
     
     ffmpeg_cmd = ["ffmpeg", "-y"]
+    ffmpeg_cmd.extend(["-stream_loop", "-1"]) # ပုံများကုန်ပါက အစမှ ပြန်စရန်
+    
     for img in processed_images:
         ffmpeg_cmd.extend(["-loop", "1", "-t", str(seconds_per_image), "-i", img])
     
@@ -91,13 +93,15 @@ def main():
     ffmpeg_cmd.extend([
         "-filter_complex", filter_parts_str,
         "-map", "[outv]",
-        "-map", f"{n}:a", "-c:a", "aac", "-shortest",
-        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+        "-map", f"{n}:a", 
+        "-c:a", "aac", 
+        "-shortest", # အသံဖိုင် ပြီးဆုံးသည့်အချိန်တွင် ဗီဒီယိုပါ တခါတည်း ပြီးဆုံးမည်
+        "-c:v", "libx264", "-preset", video_preset, "-pix_fmt", "yuv420p",
         output_video
     ])
 
     print("Video Render စတင်နေပါပြီ...")
-    process = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    process = subprocess.run(ffmpeg_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=Type if 'Type' in globals() else text := True)
 
     if process.returncode == 0:
         print("Video Render လုပ်ဆောင်ချက် အောင်မြင်စွာ ပြီးဆုံးပါပြီ!")
