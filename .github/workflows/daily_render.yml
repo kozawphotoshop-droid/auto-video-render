@@ -8,8 +8,13 @@ on:
         required: true
         default: '8'
         type: string
+      transition_duration:
+        description: 'Transition / Fade ကြာချိန် (စက္ကန့် - ဥပမာ 1)'
+        required: true
+        default: '1'
+        type: string
       video_preset:
-        description: 'ဗီဒီယို Render အမြန်နှုန်း/Quality (ultrafast, fast, medium)'
+        description: 'Render အမြန်နှုန်း (ultrafast, fast, medium)'
         required: true
         default: 'ultrafast'
         type: choice
@@ -17,6 +22,11 @@ on:
           - ultrafast
           - fast
           - medium
+      video_quality:
+        description: 'ဗီဒီယို Quality (CRF - နံပါတ်ငယ်လေ အရည်အသွေးကောင်းလေ၊ ဥပမာ 23)'
+        required: true
+        default: '23'
+        type: string
 
 jobs:
   build:
@@ -46,7 +56,9 @@ jobs:
         AUDIO_FOLDER_ID: ${{ secrets.AUDIO_FOLDER_ID }}
         IMAGES_FOLDER_ID: ${{ secrets.IMAGES_FOLDER_ID }}
         INPUT_SECONDS: ${{ github.event.inputs.seconds_per_image }}
+        INPUT_TRANSITION: ${{ github.event.inputs.transition_duration }}
         INPUT_PRESET: ${{ github.event.inputs.video_preset }}
+        INPUT_CRF: ${{ github.event.inputs.video_quality }}
       run: |
         python render.py
 
