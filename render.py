@@ -2,16 +2,12 @@ import os
 import random
 import subprocess
 import urllib.request
-import json
 import re
 
 AUDIO_DRIVE_FOLDER_ID = os.environ.get("AUDIO_FOLDER_ID")
 IMAGES_DRIVE_FOLDER_ID = os.environ.get("IMAGES_FOLDER_ID")
 
 def get_drive_files_via_api(folder_id):
-    # Google Drive Public API ကို အသုံးပြု၍ ဖိုင်စာရင်းများကို တိကျစွာ ရယူခြင်း
-    url = f"https://www.googleapis.com/drive/v3/files?q='{folder_id}'+in+parents&key=AIzaSyA..." # Public folder list query
-    # API Key မလိုဘဲ Shared Drive/Folder များကို Alternative JSON Endpoint ဖြင့် တိုက်ရိုက်ဆွဲထုတ်ခြင်း
     alt_url = f"https://drive.google.com/drive/u/0/folders/{folder_id}"
     req = urllib.request.Request(alt_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
     
@@ -20,25 +16,22 @@ def get_drive_files_via_api(folder_id):
         with urllib.request.urlopen(req) as response:
             html_content = response.read().decode('utf-8')
             
-        # Google Drive ၏ internal JSON data (WIZ structure) ထဲမှ တကယ့် file ID နှင့် name များကို ရှာဖွေခြင်း
-        # ဤ Pattern သည် .wav, .mp3 နှင့် ပုံဖိုင်နာမည်များကို တိကျစွာ ဖမ်းယူပေးပါသည်
-        matches = re.findall(r'\["([a-zA-Z0-9_-]{25,})",\s*"([^"]+\.(?:wav|mp3|m4a|aac|ogg|flac|png|jpg|jpeg))"\s*,', html_content, re.IGNORECASE)
+        # Google Drive HTML ထဲမှ ဖိုင် ID နှင့် နာမည်များကို ရှာဖွေခြင်း
+        matches = re.findall(r'\["([a-zA-Z0-9_-]{25,})",\s*"([^"]+)"', html_content)
         
         seen_ids = set()
+        ignored_terms = ["google", "http", "www", "clients", "drive", "usercontent", "script"]
+        
         for file_id, name in matches:
-            if file_id not in seen_ids and file_id != folder_id:
-                seen_ids.add(file_id)
-                files.append({"id": file_id, "name": name})
+            if file_id in seen_ids or file_id == folder_id:
+                continue
+            name_lower = name.lower()
+            if any(term in name_lower for term in ignored_terms):
+                continue
                 
-        # အကယ်၍ အထက်ပါ Pattern ဖြင့် မမိပါက အထွေထွေ ဖိုင်နာမည်များကိုပါ ရှာဖွေမည့် fallback pattern
-        if not files:
-            general_matches = re.findall(r'\["([a-zA-Z0-9_-]{25,})",\s*"([^"]+)"', html_content)
-            for file_id, name in general_matches:
-                if file_id not in seen_ids and file_id != folder_id:
-                    if not any(x in name.lower() for x in ["google", "http", "drive", "usercontent", "clients", "script", ".js", ".css"]):
-                        seen_ids.add(file_id)
-                        files.append({"id": file_id, "name": name})
-                        
+            seen_ids.add(file_id)
+            files.append({"id": file_id, "name": name})
+            
         return files
     except Exception as e:
         print(f"Drive ဖိုင်များကို ဖတ်ရှုရာတွင် အမှားအယွင်းရှိသည်: {e}")
@@ -70,6 +63,7 @@ def main():
 
     os.makedirs("downloads", exist_ok=True)
     
+    # ၁။ Audio ဖိုင်ကို ရှာဖွေခြင်း
     print("Google Drive ၏ audio ဖိုဒါကို စစ်ဆေးနေပါပြီ...")
     audio_files = get_drive_files_via_api(AUDIO_DRIVE_FOLDER_ID)
     print(f"တွေ့ရှိရသော အသံဖိုင်များ: {audio_files}")
@@ -88,7 +82,7 @@ def main():
             print(f"အသုံးပြုမည့် အသံဖိုင်: {f['name']}")
             break
             
-    # အကယ်၍ extension တိုက်ရိုက်မတွေ့ပါက ပထမဆုံး တွေ့ရှိသောဖိုင်ကို ယူမည်
+    # အကယ်၍ တိကျသော extension မတွေ့ပါက ဖိုဒါထဲရှိ ပထမဆုံးဖိုင်ကို ယူမည်
     if not target_audio_id and audio_files:
         target_audio_id = audio_files[0]["id"]
         print(f"သတ်မှတ်လိုက်သော အသံဖိုင်: {audio_files[0]['name']}")
@@ -100,6 +94,7 @@ def main():
     audio_path = f"downloads/{target_audio_name}"
     download_file(target_audio_id, audio_path)
 
+    # ၂။ Images များကို ရှာဖွေခြင်း
     print("Google Drive ၏ images ဖိုဒါကို စစ်ဆေးနေပါပြီ...")
     image_files = get_drive_files_via_api(IMAGES_DRIVE_FOLDER_ID)
     valid_images = [f for f in image_files if f["name"].lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
@@ -117,6 +112,7 @@ def main():
         download_file(img_info["id"], img_path)
         local_image_paths.append(img_path)
 
+    # ၃။ FFmpeg ဖြင့် ဗီဒီယို Render လုပ်ခြင်း
     output_video = "final_output.mp4"
     temp_dir = "temp_processed"
     os.makedirs(temp_dir, exist_ok=True)
