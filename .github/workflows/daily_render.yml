@@ -1,9 +1,22 @@
 name: Daily Auto Video Render
 
 on:
-  schedule:
-    - cron: '0 15 * * *' # နေ့စဉ် မြန်မာစံတော်ချိန် ည ၉:၃၀ နာရီတွင် အလိုအလျောက် Run မည်
-  workflow_dispatch: # လက်ဖြင့် ကိုယ်တိုင် ခလုတ်နှိပ် Run လိုပါက သုံးရန်
+  workflow_dispatch:
+    inputs:
+      seconds_per_image:
+        description: 'ပုံတစ်ပုံချင်းစီပြမည့် ကြာချိန် (စက္ကန့်)'
+        required: true
+        default: '8'
+        type: string
+      video_preset:
+        description: 'ဗီဒီယို Render အမြန်နှုန်း/Quality (ultrafast, fast, medium)'
+        required: true
+        default: 'ultrafast'
+        type: choice
+        options:
+          - ultrafast
+          - fast
+          - medium
 
 jobs:
   build:
@@ -32,6 +45,8 @@ jobs:
       env:
         AUDIO_FOLDER_ID: ${{ secrets.AUDIO_FOLDER_ID }}
         IMAGES_FOLDER_ID: ${{ secrets.IMAGES_FOLDER_ID }}
+        INPUT_SECONDS: ${{ github.event.inputs.seconds_per_image }}
+        INPUT_PRESET: ${{ github.event.inputs.video_preset }}
       run: |
         python render.py
 
