@@ -1,125 +1,71 @@
 import os
+import glob
 import random
 import subprocess
-import urllib.request
-import re
+import gdown
 
 AUDIO_DRIVE_FOLDER_ID = os.environ.get("AUDIO_FOLDER_ID")
 IMAGES_DRIVE_FOLDER_ID = os.environ.get("IMAGES_FOLDER_ID")
 
-def get_drive_files_via_api(folder_id):
-    alt_url = f"https://drive.google.com/drive/u/0/folders/{folder_id}"
-    req = urllib.request.Request(alt_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
-    
-    files = []
-    try:
-        with urllib.request.urlopen(req) as response:
-            html_content = response.read().decode('utf-8')
-            
-        # Google Drive HTML ထဲမှ ဖိုင် ID နှင့် နာမည်များကို ရှာဖွေခြင်း
-        matches = re.findall(r'\["([a-zA-Z0-9_-]{25,})",\s*"([^"]+)"', html_content)
-        
-        seen_ids = set()
-        ignored_terms = ["google", "http", "www", "clients", "drive", "usercontent", "script"]
-        
-        for file_id, name in matches:
-            if file_id in seen_ids or file_id == folder_id:
-                continue
-            name_lower = name.lower()
-            if any(term in name_lower for term in ignored_terms):
-                continue
-                
-            seen_ids.add(file_id)
-            files.append({"id": file_id, "name": name})
-            
-        return files
-    except Exception as e:
-        print(f"Drive ဖိုင်များကို ဖတ်ရှုရာတွင် အမှားအယွင်းရှိသည်: {e}")
-        return []
-
-def download_file(file_id, output_path):
-    url = f"https://drive.google.com/uc?export=download&id={file_id}"
-    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor())
-    urllib.request.install_opener(opener)
-    try:
-        response = opener.open(url)
-        content = response.read()
-        if b"download_warning" in content or b"Virus scan warning" in content:
-            match = re.search(r'confirm=([0-9A-Za-z_]+)', content.decode('utf-8', errors='ignore'))
-            if match:
-                confirm_token = match.group(1)
-                confirmed_url = f"{url}&confirm={confirm_token}"
-                response = opener.open(confirmed_url)
-                content = response.read()
-                
-        with open(output_path, "wb") as f:
-            f.write(content)
-        print(f"ဒေါင်းလုဒ်လုပ်ပြီးပါပြီ: {output_path}")
-    except Exception as e:
-        print(f"ဒေါင်းလုဒ်ဆွဲ၍ မရပါ ({output_path}): {e}")
-
 def main():
     print("ဗီဒီယို ဖန်တီးခြင်း လုပ်ငန်းစဉ် စတင်ပါပြီ...")
 
-    os.makedirs("downloads", exist_ok=True)
+    os.makedirs("downloads/audio", exist_ok=True)
+    os.makedirs("downloads/images", exist_ok=True)
     
-    # ၁။ Audio ဖိုင်ကို ရှာဖွေခြင်း
-    print("Google Drive ၏ audio ဖိုဒါကို စစ်ဆေးနေပါပြီ...")
-    audio_files = get_drive_files_via_api(AUDIO_DRIVE_FOLDER_ID)
-    print(f"တွေ့ရှိရသော အသံဖိုင်များ: {audio_files}")
+    # ၁။ Google Drive ၏ audio ဖိုဒါမှ ဖိုင်များကို gdown ဖြင့် ဆွဲယူခြင်း
+    print("Google Drive ၏ audio ဖိုဒါကို ဆွဲယူနေပါပြီ...")
+    audio_url = f"https://drive.google.com/drive/folders/{AUDIO_DRIVE_FOLDER_ID}"
+    gdown.download_folder(audio_url, output="downloads/audio", quiet=False, use_cookies=False)
     
-    target_audio_id = None
-    target_audio_name = "audio.wav"
-    
-    for f in audio_files:
-        name_lower = f["name"].lower()
-        if name_lower.endswith(('.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac')):
-            target_audio_id = f["id"]
-            if name_lower.endswith('.mp3'):
-                target_audio_name = "audio.mp3"
-            else:
-                target_audio_name = "audio.wav"
-            print(f"အသုံးပြုမည့် အသံဖိုင်: {f['name']}")
-            break
-            
-    # အကယ်၍ တိကျသော extension မတွေ့ပါက ဖိုဒါထဲရှိ ပထမဆုံးဖိုင်ကို ယူမည်
-    if not target_audio_id and audio_files:
-        target_audio_id = audio_files[0]["id"]
-        print(f"သတ်မှတ်လိုက်သော အသံဖိုင်: {audio_files[0]['name']}")
+    # downloads/audio ဖိုဒါအတွင်း မည်သည့်နေရာတွင်ရှိသည်ဖြစ်စေ အသံဖိုင်ကို ရှာဖွေခြင်း
+    audio_files = sorted(
+        glob.glob(os.path.join("downloads/audio", "**", "*.mp3"), recursive=True) +
+        glob.glob(os.path.join("downloads/audio", "**", "*.wav"), recursive=True) +
+        glob.glob(os.path.join("downloads/audio", "**", "*.m4a"), recursive=True) +
+        glob.glob(os.path.join("downloads/audio", "**", "*.ogg"), recursive=True) +
+        glob.glob(os.path.join("downloads/audio", "*.mp3")) +
+        glob.glob(os.path.join("downloads/audio", "*.wav"))
+    )
 
-    if not target_audio_id:
+    if not audio_files:
         print("Error: Google Drive ၏ audio ဖိုဒါထဲတွင် အသံဖိုင် မတွေ့ရှိရပါ။")
         return
 
-    audio_path = f"downloads/{target_audio_name}"
-    download_file(target_audio_id, audio_path)
+    audio_path = audio_files[0]
+    print(f"အသုံးပြုမည့် အသံဖိုင်: {audio_path}")
 
-    # ၂။ Images များကို ရှာဖွေခြင်း
-    print("Google Drive ၏ images ဖိုဒါကို စစ်ဆေးနေပါပြီ...")
-    image_files = get_drive_files_via_api(IMAGES_DRIVE_FOLDER_ID)
-    valid_images = [f for f in image_files if f["name"].lower().endswith(('.png', '.jpg', '.jpeg', '.webp'))]
+    # ၂။ Google Drive ၏ images ဖိုဒါမှ ပုံများကို gdown ဖြင့် ဆွဲယူခြင်း
+    print("Google Drive ၏ images ဖိုဒါကို ဆွဲယူနေပါပြီ...")
+    images_url = f"https://drive.google.com/drive/folders/{IMAGES_DRIVE_FOLDER_ID}"
+    gdown.download_folder(images_url, output="downloads/images", quiet=False, use_cookies=False)
+    
+    # downloads/images ဖိုဒါအတွင်း မည်သည့်နေရာတွင်ရှိသည်ဖြစ်စေ ပုံများကို ရှာဖွေခြင်း
+    valid_images = sorted(
+        glob.glob(os.path.join("downloads/images", "**", "*.png"), recursive=True) +
+        glob.glob(os.path.join("downloads/images", "**", "*.jpg"), recursive=True) +
+        glob.glob(os.path.join("downloads/images", "**", "*.jpeg"), recursive=True) +
+        glob.glob(os.path.join("downloads/images", "**", "*.webp"), recursive=True) +
+        glob.glob(os.path.join("downloads/images", "*.png")) +
+        glob.glob(os.path.join("downloads/images", "*.jpg")) +
+        glob.glob(os.path.join("downloads/images", "*.jpeg"))
+    )
+
     print(f"တွေ့ရှိရသော ပုံအရေအတွက်: {len(valid_images)} ခု")
     
     if not valid_images:
         print("Error: Google Drive ၏ images ဖိုဒါထဲတွင် ပုံများ မတွေ့ရှိရပါ။")
         return
 
-    selected_images = random.sample(valid_images, min(3, len(valid_images)))
+    selected_images = valid_images[:10]
+
+    # ၃။ ပုံများကို 1280x720 သို့ Resize လုပ်ခြင်း
+    temp_img_dir = "temp_slideshow_imgs"
+    os.makedirs(temp_img_dir, exist_ok=True)
     
-    local_image_paths = []
-    for idx, img_info in enumerate(selected_images):
-        img_path = f"downloads/img_{idx}.jpg"
-        download_file(img_info["id"], img_path)
-        local_image_paths.append(img_path)
-
-    # ၃။ FFmpeg ဖြင့် ဗီဒီယို Render လုပ်ခြင်း
-    output_video = "final_output.mp4"
-    temp_dir = "temp_processed"
-    os.makedirs(temp_dir, exist_ok=True)
-
     processed_images = []
-    for idx, img_path in enumerate(local_image_paths):
-        out_img = os.path.join(temp_dir, f"img_{idx:03d}.png")
+    for idx, img_path in enumerate(selected_images):
+        out_img = os.path.join(temp_img_dir, f"img_{idx:03d}.png")
         resize_cmd = [
             "ffmpeg", "-y", "-i", img_path,
             "-vf", "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2",
@@ -128,7 +74,10 @@ def main():
         subprocess.run(resize_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         processed_images.append(out_img)
 
+    # ၄။ FFmpeg ဖြင့် ဗီဒီယို Render လုပ်ခြင်း
+    output_video = "final_output.mp4"
     seconds_per_image = 10
+    
     ffmpeg_cmd = ["ffmpeg", "-y"]
     for img in processed_images:
         ffmpeg_cmd.extend(["-loop", "1", "-t", str(seconds_per_image), "-i", img])
@@ -157,5 +106,4 @@ def main():
     else:
         print(f"Error ဖြစ်ပွားခဲ့သည်: {process.stderr[-500:]}")
 
-if __name__ == "__main__":
-    main()
+if __name
