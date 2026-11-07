@@ -2,7 +2,7 @@ name: Daily Auto Video Render
 
 on:
   schedule:
-    - cron: '0 15 * * *' # နေ့စဉ် မြန်မာစံတော်ချိန် ည ၉:၃၀ နာရီတွင် အလိုအလျောက် Run မည် (UTC အချိန်ဖြင့် ညနေ ၃:၀၀ နာရီ)
+    - cron: '0 15 * * *' # နေ့စဉ် မြန်မာစံတော်ချိန် ည ၉:၃၀ နာရီတွင် အလိုအလျောက် Run မည်
   workflow_dispatch: # လက်ဖြင့် ကိုယ်တိုင် ခလုတ်နှိပ် Run လိုပါက သုံးရန်
 
 jobs:
@@ -40,9 +40,3 @@ jobs:
       with:
         name: generated-video
         path: final_output.mp4
-
-    - name: State ဖိုင်အသစ်ကို GitHub သို့ ပြန်လည်သိမ်းဆည်းခြင်း (Commit & Push)
-      uses: stefanzweifel/git-auto-commit-action@v4
-      with:
-        commit_message: "Auto-update state.json and render daily video"
-        branch: main
